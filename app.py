@@ -6,9 +6,8 @@ from PIL import Image
 from tensorflow.keras.models import load_model
 import gdown
 
-# Download the model from Google Drive if it doesn't exist
 MODEL_PATH = "handwriting_personality_model_final.h5"
-GDRIVE_FILE_ID = "YOUR_FILE_ID"  # replace this
+GDRIVE_FILE_ID = "1-1u1rUYd8CC5HZrIu6Js8v2hhZvP_-H1" 
 
 @st.cache_resource
 def load_model_cached():
@@ -18,7 +17,7 @@ def load_model_cached():
 
 model = load_model_cached()
 
-# Dummy dictionaries (replace with real content)
+
 trait_descriptions = {
     "Openness": "Curious, creative, and open to new experiences and ideas.",
     "Conscientiousness": "Organized, disciplined, responsible, and detail-oriented.",
@@ -35,7 +34,6 @@ handwriting_indicators = {
     "Neuroticism": "Erratic slant, heavy pressure."
 }
 
-# Dummy analyzer (replace with actual logic)
 def analyze_handwriting_personality(image_path, model):
     results = {
         "Openness": {"confidence": 0.87, "is_primary": True},
