@@ -39,16 +39,16 @@ def analyze_handwriting_personality(image_path, model):
     try:
         # Preprocess image
         img = Image.open(image_path)
-        img = img.resize((224, 224))  # Adjust size to match your model's input requirements
-        img = img.convert('RGB')
+        img = img.resize((224, 224))  # Resize image
+        img = img.convert('L')  # Convert to grayscale
         img_array = np.array(img)
         img_array = img_array / 255.0  # Normalize pixel values
-        img_array = np.expand_dims(img_array, axis=0)
+        img_array = np.expand_dims(img_array, axis=[0, -1])  # Add batch and channel dimensions
 
         # Get model predictions
         predictions = model.predict(img_array, verbose=0)
         
-        # Map predictions to traits
+        # Rest of the function remains the same
         trait_names = ["Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism"]
         results = {}
         
@@ -58,7 +58,6 @@ def analyze_handwriting_personality(image_path, model):
                 "is_primary": False
             }
         
-        # Determine primary trait
         predicted_trait = max(results, key=lambda k: results[k]["confidence"])
         results[predicted_trait]["is_primary"] = True
         confidence = results[predicted_trait]["confidence"]
