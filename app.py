@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from tensorflow.keras.models import load_model
 import gdown
+import numpy as np
 
 MODEL_PATH = "handwriting_personality_model_final.h5"
 GDRIVE_FILE_ID = "1-1u1rUYd8CC5HZrIu6Js8v2hhZvP_-H1"  
@@ -34,18 +35,39 @@ handwriting_indicators = {
     "Neuroticism": "Variable slant, sharp angles, heavy pressure, irregular spacing, tremors or uneven lines."
 }
 
-#
 def analyze_handwriting_personality(image_path, model):
-    results = {
-        "Openness": {"confidence": 0.87, "is_primary": True},
-        "Conscientiousness": {"confidence": 0.65, "is_primary": False},
-        "Extraversion": {"confidence": 0.44, "is_primary": False},
-        "Agreeableness": {"confidence": 0.39, "is_primary": False},
-        "Neuroticism": {"confidence": 0.22, "is_primary": False},
-    }
-    predicted_trait = max(results, key=lambda k: results[k]["confidence"])
-    confidence = results[predicted_trait]["confidence"]
-    return predicted_trait, confidence, results
+    try:
+        # Preprocess image
+        img = Image.open(image_path)
+        img = img.resize((224, 224))  # Adjust size to match your model's input requirements
+        img = img.convert('RGB')
+        img_array = np.array(img)
+        img_array = img_array / 255.0  # Normalize pixel values
+        img_array = np.expand_dims(img_array, axis=0)
+
+        # Get model predictions
+        predictions = model.predict(img_array, verbose=0)
+        
+        # Map predictions to traits
+        trait_names = ["Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism"]
+        results = {}
+        
+        for trait, pred in zip(trait_names, predictions[0]):
+            results[trait] = {
+                "confidence": float(pred),
+                "is_primary": False
+            }
+        
+        # Determine primary trait
+        predicted_trait = max(results, key=lambda k: results[k]["confidence"])
+        results[predicted_trait]["is_primary"] = True
+        confidence = results[predicted_trait]["confidence"]
+        
+        return predicted_trait, confidence, results
+        
+    except Exception as e:
+        st.error(f"Error analyzing handwriting: {str(e)}")
+        return None, None, None
 
 # Streamlit UI
 st.title("🖋️ Handwriting Personality Analyzer")
@@ -58,41 +80,45 @@ if uploaded_file:
     st.image(image, caption="Uploaded Image", use_column_width=True)
 
     if st.button("🔍 Analyze Handwriting"):
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-            image.save(tmp.name)
-            image_path = tmp.name
+        with st.spinner("Analyzing handwriting..."):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                image.save(tmp.name)
+                image_path = tmp.name
 
-            predicted_trait, confidence, results = analyze_handwriting_personality(image_path, model)
+                predicted_trait, confidence, results = analyze_handwriting_personality(image_path, model)
+                
+                if predicted_trait and confidence and results:
+                    st.subheader("🧠 Primary Personality Trait")
+                    st.success(f"{predicted_trait} (Confidence: {confidence:.2f})")
 
-            st.subheader("🧠 Primary Personality Trait")
-            st.success(f"{predicted_trait} (Confidence: {confidence:.2f})")
+                    st.markdown("### 📘 Description")
+                    st.write(trait_descriptions[predicted_trait])
+                    st.markdown("### ✍️ Handwriting Indicators")
+                    st.write(handwriting_indicators[predicted_trait])
 
-            st.markdown("### 📘 Description")
-            st.write(trait_descriptions[predicted_trait])
-            st.markdown("### ✍️ Handwriting Indicators")
-            st.write(handwriting_indicators[predicted_trait])
+                    # Bar chart visualization
+                    st.markdown("### 📊 Trait Confidence Chart")
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    trait_names = list(results.keys())
+                    confidences = [results[t]["confidence"] for t in trait_names]
+                    colors = ['green' if results[t]["is_primary"] else 'skyblue' for t in trait_names]
+                    bars = ax.bar(trait_names, confidences, color=colors, edgecolor='black')
+                    ax.set_ylim(0, 1)
+                    ax.set_ylabel("Confidence", fontsize=12)
+                    ax.set_title("Predicted Personality Traits from Handwriting", fontsize=14)
+                    ax.grid(axis='y', linestyle='--', alpha=0.7)
 
-            # Bar chart visualization
-            st.markdown("### 📊 Trait Confidence Chart")
-            fig, ax = plt.subplots(figsize=(10, 6))
-            trait_names = list(results.keys())
-            confidences = [results[t]["confidence"] for t in trait_names]
-            colors = ['green' if results[t]["is_primary"] else 'skyblue' for t in trait_names]
-            bars = ax.bar(trait_names, confidences, color=colors, edgecolor='black')
-            ax.set_ylim(0, 1)
-            ax.set_ylabel("Confidence", fontsize=12)
-            ax.set_title("Predicted Personality Traits from Handwriting", fontsize=14)
-            ax.grid(axis='y', linestyle='--', alpha=0.7)
+                    for bar, conf in zip(bars, confidences):
+                        ax.text(bar.get_x() + bar.get_width() / 2, conf + 0.02, f'{conf:.2f}', ha='center', fontsize=10, fontweight='bold')
 
-            for bar, conf in zip(bars, confidences):
-                ax.text(bar.get_x() + bar.get_width() / 2, conf + 0.02, f'{conf:.2f}', ha='center', fontsize=10, fontweight='bold')
+                    plt.xticks(fontsize=10)
+                    plt.yticks(fontsize=10)
 
-            plt.xticks(fontsize=10)
-            plt.yticks(fontsize=10)
+                    st.pyplot(fig)
 
-            st.pyplot(fig)
-
-            st.markdown("---")
-            st.caption("⚠️ This tool is for educational purposes only and not scientifically validated.")
-
-            os.unlink(image_path)
+                    st.markdown("---")
+                    st.caption("⚠️ This tool is for educational purposes only and not scientifically validated.")
+                else:
+                    st.error("Failed to analyze handwriting. Please try another image.")
+                
+                os.unlink(image_path)
