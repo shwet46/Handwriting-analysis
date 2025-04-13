@@ -9,8 +9,8 @@ import gdown
 import hashlib
 import time
 
-MODEL_PATH = "handwriting_personality_model_final.h5"
-GDRIVE_FILE_ID = "1-1u1rUYd8CC5HZrIu6Js8v2hhZvP_-H1/"
+MODEL_PATH = "handwriting_personality_model.h5"
+GDRIVE_FILE_ID = "1SrWdrjyUn-byNF7psRMfprhBHSEFsvNB"
 
 @st.cache_resource
 def load_model_cached():
@@ -37,35 +37,30 @@ handwriting_indicators = {
 }
 
 def preprocess_image(image_path):
-    """Preprocess image for prediction — convert to proper format for model"""
     try:
-        img = Image.open(image_path).convert('L')  
-        img = img.resize((400, 150))  
-        img_array = np.array(img) / 255.0  
-        img_array = np.expand_dims(img_array, axis=-1)  
-        img_array = np.expand_dims(img_array, axis=0)  
-        return img_array, np.array(img) / 255.0  
+        img = Image.open(image_path).convert('L')
+        img = img.resize((400, 150))
+        img_array = np.array(img) / 255.0
+        img_array = np.expand_dims(img_array, axis=-1)
+        img_array = np.expand_dims(img_array, axis=0)
+        return img_array, np.array(img) / 255.0
     except Exception as e:
         st.error(f"Error preprocessing image: {str(e)}")
         return None, None
 
 def generate_image_hash(img_array):
-    """Generate a consistent hash from image data"""
     flat_array = img_array.flatten()
-    pixels = flat_array[::100]  
+    pixels = flat_array[::100]
     pixel_bytes = (pixels * 255).astype(np.uint8).tobytes()
     return int(hashlib.md5(pixel_bytes).hexdigest(), 16) % 10000
 
 def extract_handwriting_features(img_gray, img_hash):
-    """Extract handwriting features with image-specific randomization"""
     try:
         np.random.seed(img_hash)
-        
         img_inv = 1.0 - img_gray
- 
         threshold = 0.5
         img_binary = (img_inv > threshold).astype(float)
-
+        
         size = np.mean(img_binary) * (0.8 + 0.4 * np.random.random())
         
         h_gradient = np.diff(np.pad(img_binary, ((0, 0), (0, 1))), axis=1)
@@ -76,7 +71,6 @@ def extract_handwriting_features(img_gray, img_hash):
         slant = np.clip(slant, 0, 2) / 2
         
         pressure = np.mean(img_inv) * (0.8 + 0.4 * np.random.random())
-        
         pressure_var = np.std(img_inv) * (0.8 + 0.4 * np.random.random())
         
         row_means = np.mean(img_binary, axis=0)
@@ -112,28 +106,24 @@ def analyze_handwriting_personality(image_path, model):
         img_array, img_gray = preprocess_image(image_path)
         if img_array is None:
             return None, None, None, None
-        
-        img_hash = generate_image_hash(img_gray)
-        
-        features = extract_handwriting_features(img_gray, img_hash)
 
+        img_hash = generate_image_hash(img_gray)
+        features = extract_handwriting_features(img_gray, img_hash)
         raw_predictions = model.predict(img_array)[0]
-   
+        
         if len(raw_predictions) != 5:
             raw_predictions = np.array([0.2, 0.2, 0.2, 0.2, 0.2])
         
         trait_names = ["Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism"]
- 
-        np.random.seed(img_hash)
-
-        trait_weights = np.random.random(5) * 2.0  
         
+        np.random.seed(img_hash)
+        trait_weights = np.random.random(5) * 2.0
         adjusted_predictions = raw_predictions * trait_weights
         
         if features:
             if "spacing" in features and "pressure_variability" in features:
                 adjusted_predictions[0] *= (1.0 + features["spacing"] * 0.3)
-
+            
             if "line_consistency" in features:
                 adjusted_predictions[1] *= (1.0 + features["line_consistency"] * 0.3)
             
@@ -160,7 +150,6 @@ def analyze_handwriting_personality(image_path, model):
         predicted_trait = max(results, key=lambda k: results[k]["confidence"])
         confidence = results[predicted_trait]["confidence"]
         
-
         feature_info = {}
         if features:
             important_features = ["size", "slant", "pressure", "spacing", "line_consistency", "pressure_variability"]
@@ -176,7 +165,6 @@ def analyze_handwriting_personality(image_path, model):
         st.error(traceback.format_exc())
         return None, None, None, None
 
-# Streamlit UI
 st.title("🖋️ Handwriting Personality Analyzer")
 st.write("Upload handwriting to discover personality traits using deep learning.")
 
@@ -212,51 +200,25 @@ if uploaded_file:
                                 st.metric(feature_name, f"{value:.2f}")
 
                     st.markdown("### 📊 Trait Confidence Chart")
-                    
-
-                    fig, ax = plt.subplots(figsize=(14, 8))  
-                    
+                    fig, ax = plt.subplots(figsize=(14, 8))
                     trait_names = list(results.keys())
                     confidences = [results[t]["confidence"] for t in trait_names]
-                    
                     colors = ['#2E7D32' if results[t]["is_primary"] else '#64B5F6' for t in trait_names]
-                    
-  
-                    bars = ax.bar(
-                        trait_names, 
-                        confidences, 
-                        color=colors, 
-                        edgecolor='black',
-                        linewidth=1.5,
-                        width=0.65
-                    )
-
+                    bars = ax.bar(trait_names, confidences, color=colors, edgecolor='black', linewidth=1.5, width=0.65)
                     ax.set_ylim(0, max(confidences) * 1.2)
-
                     ax.grid(axis='y', linestyle='--', alpha=0.7, color='#E0E0E0')
-       
                     ax.spines['top'].set_visible(False)
                     ax.spines['right'].set_visible(False)
-                    
                     ax.set_ylabel("Confidence Score", fontsize=14, fontweight='bold')
                     ax.set_title("Personality Traits Analysis", fontsize=18, fontweight='bold', pad=20)
-                    
+
                     for bar, conf in zip(bars, confidences):
-                        ax.text(
-                            bar.get_x() + bar.get_width() / 2, 
-                            conf + 0.02, 
-                            f'{conf:.2f}', 
-                            ha='center', 
-                            fontsize=12, 
-                            fontweight='bold',
-                            color='black'
-                        )
-                    
+                        ax.text(bar.get_x() + bar.get_width() / 2, conf + 0.02, f'{conf:.2f}', ha='center', 
+                               fontsize=12, fontweight='bold', color='black')
+
                     plt.xticks(fontsize=12, fontweight='bold')
                     plt.yticks(fontsize=12)
-                    
                     plt.tight_layout()
-                    
                     st.pyplot(fig)
 
                     st.markdown("---")
